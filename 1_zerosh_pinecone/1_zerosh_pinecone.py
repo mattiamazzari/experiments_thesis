@@ -113,7 +113,7 @@ def main():
         template=macrocategory_prompt_template,
         input_variables=["macrocategory_context","question_macro"]
     )
-    chain = load_qa_chain(llm, prompt=macrocategory_prompt, output_key="macrocategory_result")
+    chain = load_qa_chain(llm, prompt=macrocategory_prompt, output_key="macrocategory_result", chain_type="stuff")
     
     # Run the macrocategory chain to classify the macrocategory
     macrocategory_result = chain({"input_documents": category_related_docs, "question": question_macro}, return_only_outputs=True)
