@@ -1,5 +1,6 @@
 from dotenv import load_dotenv,find_dotenv
 from langchain.document_loaders import UnstructuredPDFLoader, OnlinePDFLoader, DirectoryLoader, PyPDFLoader
+from langchain.schema import prompt_template
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma, Pinecone
 from langchain.embeddings import HuggingFaceEmbeddings
@@ -10,6 +11,7 @@ from langchain import HuggingFacePipeline
 from transformers import AutoTokenizer
 from langchain.chains import SimpleSequentialChain
 from instruct_pipeline import InstructionTextGenerationPipeline
+from langchain import PromptTemplate
 import transformers
 import torch
 import pinecone
@@ -67,7 +69,7 @@ def main():
     #config.attn_config['attn_impl'] = 'triton'  # change this to use triton-based FlashAttention
     #config.init_device = 'cuda:0'  # For fast initialization directly on GPU!
 
-    load_8bit = True
+    load_8bit = False
     tokenizer = AutoTokenizer.from_pretrained(name)  # , padding_side="left")
     model = transformers.AutoModelForCausalLM.from_pretrained(
         name,
@@ -97,8 +99,18 @@ def main():
     Additionally, this section includes customer inquiries, such as requests for information about insurance types, quotation requests, issues related to the website and application
     """
 
+    prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+    Context: {first_context}
+
+    ```{insurance_claim}```
+
+    Query: {query}
+    Answer in Italian:""" 
+
     first_prompt = PromptTemplate(
-        template=f"{first_context}\n\n```{{insurance_claim}}```\n\nQuery: {query}\nAnswer in Italian:"
+        template=prompt_template,
+        input_variables=["first_context","insurance_claim","query"]
     )
     chain = load_qa_chain(llm, prompt=first_prompt, output_key="result_macrocategory_classification")
     
