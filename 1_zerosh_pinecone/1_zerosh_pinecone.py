@@ -30,7 +30,7 @@ def main():
 
     # Note: If you're using PyPDFLoader then it will split by page for you already
     print (f'You have {len(data)} document(s) in your data')
-    print (f'There are {len(data[30].page_content)} characters in your document')
+    #print (f'There are {len(data[30].page_content)} characters in your document')
     
     directory = '/content/data'
     
