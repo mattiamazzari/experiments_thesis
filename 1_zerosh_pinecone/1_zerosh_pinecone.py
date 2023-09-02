@@ -1,5 +1,5 @@
 from dotenv import load_dotenv,find_dotenv
-from langchain.document_loaders import UnstructuredPDFLoader, OnlinePDFLoader, PyP, DirectoryLoader, PyPDFLoader
+from langchain.document_loaders import UnstructuredPDFLoader, OnlinePDFLoader, DirectoryLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma, Pinecone
 from langchain.embeddings import HuggingFaceEmbeddings
