@@ -53,8 +53,10 @@ def main():
     index_name = "langchaintest" # put in the name of your pinecone index here
     docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name)
 
-    query = "What are examples of good data science teams?"
-    docs = docsearch.similarity_search(query)
+    query = "What category does this insurance claim belong to?"
+    query_2 = "What subcategory does this insurance claim belong to?"
+    docs_for_category = docsearch.similarity_search(query)
+    docs_for_subcategory = docsearch.similarity_search(query_2)
     
     model = "meta-llama/Llama-2-7b-chat-hf"
 
@@ -85,16 +87,14 @@ def main():
     he 'Area Commerciale' class groups all the insurance claims are reviewed where customers contest the lack of assistance from the insurance company despite repeated requests.
     Additionally, this section includes customer inquiries, such as requests for information about insurance types, quotation requests, issues related to the website and application
     """
-    
-    first_query = "What category does this insurance claim belong to?"
 
     first_prompt = PromptTemplate(
-        template=f"{first_context}\n\n```{{insurance_claim}}```\n\nQuery: {first_query}\nAnswer in Italian:"
+        template=f"{first_context}\n\n```{{insurance_claim}}```\n\nQuery: {query}\nAnswer in Italian:"
     )
     chain = load_qa_chain(llm, prompt=first_prompt, output_key="result_macrocategory_classification")
     
     # Run the first chain to classify the macrocategory
-    macrocategory_result = chain({"input_documents": docs, "first_query": first_query}, return_only_outputs=True)
+    macrocategory_result = chain({"input_documents": docs_for_category, "first_query": query}, return_only_outputs=True)
     
     # Define the second context and query based on the macrocategory result
     if macrocategory_result == "Polizze":
@@ -116,16 +116,14 @@ def main():
         # Handle the case where macrocategory classification is unknown
         second_context = "Unable to determine subcategory without macrocategory classification."
 
-    second_query = "What subcategory does this insurance claim belong to?"
-
     second_prompt = PromptTemplate(
-        template=f"{second_context}\n\nQuery: {second_query}\nAnswer in Italian:"
+        template=f"{second_context}\n\nQuery: {query_2}\nAnswer in Italian:"
     )
 
     chain_two = load_qa_chain(pipeline=pipeline, prompt=second_prompt, output_key="result_subcategory_classification")
 
     # Run the second chain to classify the subcategory
-    subcategory_result = chain_two({"input_documents": docs, "second_query": second_query}, return_only_outputs=True)
+    subcategory_result = chain_two({"input_documents": docs_for_subcategory, "second_query": query_2}, return_only_outputs=True)
 
     print(f"Macrocategory Classification: {macrocategory_result}")
     print(f"Subcategory Classification: {subcategory_result}")
@@ -143,7 +141,7 @@ def main():
     """
 
     # Run the chain specifying only the input variable for the first chain.
-    overall_chain({"input_documents": docs, "first_query": first_query, "second_query": second_query})
+    overall_chain({"input_documents": docs_for_category, "first_query": query_1, "second_query": query_2})
 
 def load_docs(directory):
   loader = DirectoryLoader(directory)
