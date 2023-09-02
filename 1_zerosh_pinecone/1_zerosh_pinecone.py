@@ -9,7 +9,7 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.chains import LLMChain
 from langchain import HuggingFacePipeline
 from transformers import AutoTokenizer
-from langchain.chains import SimpleSequentialChain
+from langchain.chains import SimpleSequentialChain, SequentialChain
 from instruct_pipeline import InstructionTextGenerationPipeline
 from langchain import PromptTemplate
 import transformers
@@ -110,7 +110,7 @@ def main():
     print(macrocategory_prompt_template)
 
     macrocategory_prompt = PromptTemplate(
-        template=prompt_template,
+        template=macrocategory_prompt_template,
         input_variables=["macrocategory_context","question_macro"]
     )
     chain = load_qa_chain(llm, prompt=macrocategory_prompt, output_key="macrocategory_result")
