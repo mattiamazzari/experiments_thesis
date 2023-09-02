@@ -14,10 +14,12 @@ import transformers
 import torch
 import pinecone
 import os
+import sys
 
 def main():
     load_dotenv(find_dotenv())
-    loader = PyPDFLoader("../data/your_complaint.pdf")
+    pdf_path = sys.argv[1]
+    loader = PyPDFLoader(pdf_path)
 
     ## Other options for loaders
     # loader = UnstructuredPDFLoader("../data/field-guide-to-data-science.pdf")
