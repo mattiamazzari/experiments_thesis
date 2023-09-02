@@ -59,7 +59,7 @@ def main():
 
     # Note: If you're using PyPDFLoader then it will split by page for you already
     print(f'You have {len(data)} document(s) in your data')
-    # print (f'There are {len(data[30].page_content)} characters in your document')
+    # print (f'There are {len(data[0].page_content)} characters in your document')
 
     """
     directory = '/content/data'
@@ -67,7 +67,7 @@ def main():
     len(documents)
     """
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=0)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=0)
     texts = text_splitter.split_documents(data)
     print(f'Now you have {len(texts)} documents')
 
@@ -86,12 +86,11 @@ def main():
     index_name = "example"  # put in the name of your pinecone index here
     docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name)
 
-    query = "What category does this insurance claim belong to?"
-    query_2 = "What subcategory does this insurance claim belong to?"
-    docs_for_category = docsearch.similarity_search(query)
-    docs_for_subcategory = docsearch.similarity_search(query_2)
+    question_macro = "What category does this insurance claim belong to? The options are 'Polizze', 'Sinistri' and 'Area Commerciale'"  
+    category_related_docs = docsearch.similarity_search(question_macro)
     
-    first_context = """You are a text classifier of insurance claims. Given the text of the insurance claim delimited by triple backquotes, classify and label
+    macrocategory_context = """You are a text classifier of insurance claims.
+    Given the input documents which represent an insurance claim, classify and label
     the insurance claim with one of these three classes: Polizze, Sinistri and Area Commerciale.
     Here is a detailed description of the meaning of each class:
     The 'Polizze' class groups all the insurance claims sent by customers to report issues related to the contract established between the customer and the referring insurance company are included.
@@ -101,75 +100,91 @@ def main():
     Additionally, this section includes customer inquiries, such as requests for information about insurance types, quotation requests, issues related to the website and application
     """
 
-    prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+    macrocategory_prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
-    Context: {first_context}
+    Context: {macrocategory_context}
 
-    ```{insurance_claim}```
-
-    Query: {query}
+    Question: {question_macro}
     Answer in Italian:""" 
+    
+    print(macrocategory_prompt_template)
 
-    first_prompt = PromptTemplate(
+    macrocategory_prompt = PromptTemplate(
         template=prompt_template,
-        input_variables=["first_context","insurance_claim","query"]
+        input_variables=["macrocategory_context","question_macro"]
     )
-    chain = load_qa_chain(llm, prompt=first_prompt, output_key="result_macrocategory_classification")
+    chain = load_qa_chain(llm, prompt=macrocategory_prompt, output_key="macrocategory_result")
     
-    # Run the first chain to classify the macrocategory
-    macrocategory_result = chain({"input_documents": docs_for_category, "first_query": query}, return_only_outputs=True)
+    # Run the macrocategory chain to classify the macrocategory
+    macrocategory_result = chain({"input_documents": category_related_docs, "question": question_macro}, return_only_outputs=True)
     
+    print(f"Predicted macrocategory: {macrocategory_result}")
+    
+    branch_context = """
+        You are again a text classifier. Given your previous answer containing the class assigned to the insurance claim,
+        classify the insurance claim for the Polizze category into three possible branches: 'Auto', 'Vita' and 'Altri rami'.
+        'Auto' includes all the insurance claims related to car insurance.
+        'Vita' includes all the insurance claims related to life insurance.
+        'Altri rami' includes all the insurance claims that do not belong to the 'Auto' or 'Vita' branches, for example
+        health insurance, home insurance, theft insurance, fire insurance, technological risks and more.
+        """
+    
+    """
     # Define the second context and query based on the macrocategory result
     if macrocategory_result == "Polizze":
-        second_context = """
-        You are again a text classifier. Given your previous answer containing the class assigned to the insurance claim,
-        classify the subcategory for the Polizze category. The possible subcategories for Polizze are: Subcategory_A, Subcategory_B, Subcategory_C.
-        """
+        # Sottocategorie....
     elif macrocategory_result == "Sinistri":
-        second_context = """
-        You are again a text classifier. Given your previous answer containing the class assigned to the insurance claim,
-        classify the subcategory for the Sinistri category. The possible subcategories for Sinistri are: Subcategory_X, Subcategory_Y, Subcategory_Z.
-        """
+        # Sottocategorie....
     elif macrocategory_result == "Area Commerciale":
-        second_context = """
-        You are again a text classifier. Given your previous answer containing the class assigned to the insurance claim,
-        classify the subcategory for the Area Commerciale category. The possible subcategories for Area Commerciale are: Subcategory_P, Subcategory_Q, Subcategory_R.
-        """
-    else:
-        # Handle the case where macrocategory classification is unknown
-        second_context = "Unable to determine subcategory without macrocategory classification."
+    """
+
+    question_branch = """What branch does this insurance claim belong to? The options are 'Auto', 'Vita' and 'Altri rami'.
+    The 'Altri rami' branch includes all the insurance claims that do not belong to the 'Auto' or 'Vita' branches."""
+        
+    branch_related_docs = docsearch.similarity_search(question_branch)
+    
+    second_prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+    Macrocategory: {macrocategory_result}
+    Context: {branch_context}
+
+    Question: {question_branch}
+    Answer in Italian:""" 
 
     second_prompt = PromptTemplate(
-        template=f"{second_context}\n\nQuery: {query_2}\nAnswer in Italian:"
+        template=second_prompt_template,
+        input_variables=["branch_context","question","macrocategory_result"]
     )
 
-    chain_two = load_qa_chain(pipeline=pipeline, prompt=second_prompt, output_key="result_subcategory_classification")
+    chain_two = load_qa_chain(pipeline=pipeline, prompt=second_prompt, output_key="branch_result")
 
-    # Run the second chain to classify the subcategory
-    subcategory_result = chain_two({"input_documents": docs_for_subcategory, "second_query": query_2}, return_only_outputs=True)
+    # Run the second chain to classify the branch
+    branch_result = chain_two({"input_documents": branch_related_docs, "question": question_branch}, return_only_outputs=True)
 
-    print(f"Macrocategory Classification: {macrocategory_result}")
-    print(f"Subcategory Classification: {subcategory_result}")
+    print(f"Branch result: {branch_result}")
     
     # Define a sequential chain using the two chains above: the second chain takes the output of the first chain as input
-    overall_chain = SimpleSequentialChain(chains=[chain, chain_two], verbose=True)
+    #overall_chain = SimpleSequentialChain(chains=[chain, chain_two], verbose=True)
 
-    """
+    
     overall_chain = SequentialChain(
-        chains=[synopsis_chain, review_chain],
-        input_variables=["era", "title"],
+        chains=[chain, chain_two],
+        input_variables=["macrocategory_context", "question_macro", "branch_context", "question_branch"],
         # Here we return multiple variables
-        output_variables=["synopsis", "review"],
+        output_variables=["macrocategory_result", "branch_result"],
         verbose=True)
-    """
+    
 
-    # Run the chain specifying only the input variable for the first chain.
-    overall_chain({"input_documents": docs_for_category, "first_query": query_1, "second_query": query_2})
+    # Run the overall chain
+    overall_result = overall_chain({"input_documents": data}, return_only_outputs=True)
+    print(f"Overall result: {overall_result}")
 
+"""
 def load_docs(directory):
   loader = DirectoryLoader(directory)
   documents = loader.load()
   return documents
+"""
 
 if __name__ == "__main__":
     main()
