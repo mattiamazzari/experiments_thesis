@@ -19,48 +19,6 @@ import os
 import sys
 
 def main():
-    load_dotenv(find_dotenv())
-    pdf_path = sys.argv[1]
-    loader = PyPDFLoader(pdf_path)
-
-    ## Other options for loaders
-    # loader = UnstructuredPDFLoader("../data/field-guide-to-data-science.pdf")
-    ### This one is used to load an online pdf:
-    #loader = OnlinePDFLoader("https://wolfpaulus.com/wp-content/uploads/2017/05/field-guide-to-data-science.pdf")
-
-    data = loader.load()
-
-    # Note: If you're using PyPDFLoader then it will split by page for you already
-    print (f'You have {len(data)} document(s) in your data')
-    #print (f'There are {len(data[30].page_content)} characters in your document')
-    
-    #directory = '/content/data'
-    #documents = load_docs(directory)
-    #len(documents)
-    
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=0)
-    texts = text_splitter.split_documents(data)
-    print (f'Now you have {len(texts)} documents')
-    
-    # Check to see if there is an environment variable with your API keys, if not, use what you put below
-    PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', '9fa8ba9d-344d-4466-8e7e-78f825ad7caf')
-    PINECONE_API_ENV = os.environ.get('PINECONE_API_ENV', 'gcp-starter') # You may need to switch with your env
-
-    embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
-
-    # initialize pinecone
-    pinecone.init(
-        api_key=PINECONE_API_KEY,  # find at app.pinecone.io
-        environment=PINECONE_API_ENV  # next to api key in console
-    )
-
-    index_name = "example" # put in the name of your pinecone index here
-    docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name)
-
-    query = "What category does this insurance claim belong to?"
-    query_2 = "What subcategory does this insurance claim belong to?"
-    docs_for_category = docsearch.similarity_search(query)
-    docs_for_subcategory = docsearch.similarity_search(query_2)
     
     name = 'mosaicml/mpt-7b'
 
@@ -88,6 +46,50 @@ def main():
     pipeline = InstructionTextGenerationPipeline(model=model, tokenizer=tokenizer)
 
     llm = HuggingFacePipeline(pipeline = pipeline, model_kwargs = {'temperature':0})
+
+    pdf_path = sys.argv[1]
+    loader = PyPDFLoader(pdf_path)
+
+    ## Other options for loaders
+    # loader = UnstructuredPDFLoader("../data/field-guide-to-data-science.pdf")
+    ### This one is used to load an online pdf:
+    # loader = OnlinePDFLoader("https://wolfpaulus.com/wp-content/uploads/2017/05/field-guide-to-data-science.pdf")
+
+    data = loader.load()
+
+    # Note: If you're using PyPDFLoader then it will split by page for you already
+    print(f'You have {len(data)} document(s) in your data')
+    # print (f'There are {len(data[30].page_content)} characters in your document')
+
+    """
+    directory = '/content/data'
+    documents = load_docs(directory)
+    len(documents)
+    """
+
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=0)
+    texts = text_splitter.split_documents(data)
+    print(f'Now you have {len(texts)} documents')
+
+    # Check to see if there is an environment variable with your API keys, if not, use what you put below
+    PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', '9fa8ba9d-344d-4466-8e7e-78f825ad7caf')
+    PINECONE_API_ENV = os.environ.get('PINECONE_API_ENV', 'gcp-starter')  # You may need to switch with your env
+
+    embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
+
+    # initialize pinecone
+    pinecone.init(
+        api_key=PINECONE_API_KEY,  # find at app.pinecone.io
+        environment=PINECONE_API_ENV  # next to api key in console
+    )
+
+    index_name = "example"  # put in the name of your pinecone index here
+    docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name)
+
+    query = "What category does this insurance claim belong to?"
+    query_2 = "What subcategory does this insurance claim belong to?"
+    docs_for_category = docsearch.similarity_search(query)
+    docs_for_subcategory = docsearch.similarity_search(query_2)
     
     first_context = """You are a text classifier of insurance claims. Given the text of the insurance claim delimited by triple backquotes, classify and label
     the insurance claim with one of these three classes: Polizze, Sinistri and Area Commerciale.
