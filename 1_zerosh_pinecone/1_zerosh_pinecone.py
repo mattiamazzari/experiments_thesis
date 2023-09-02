@@ -32,10 +32,9 @@ def main():
     print (f'You have {len(data)} document(s) in your data')
     #print (f'There are {len(data[30].page_content)} characters in your document')
     
-    directory = '/content/data'
-    
-    documents = load_docs(directory)
-    len(documents)
+    #directory = '/content/data'
+    #documents = load_docs(directory)
+    #len(documents)
     
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=0)
     texts = text_splitter.split_documents(data)
