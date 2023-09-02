@@ -8,7 +8,7 @@ from langchain.llms import OpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.chains import LLMChain
 from langchain import HuggingFacePipeline
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, pipeline
 from langchain.chains import SimpleSequentialChain, SequentialChain
 from instruct_pipeline import InstructionTextGenerationPipeline
 from langchain import PromptTemplate
@@ -20,14 +20,14 @@ import sys
 
 def main():
     
-    name = 'mosaicml/mpt-7b'
+    name = 'mosaicml/mpt-30b'
 
     config = transformers.AutoConfig.from_pretrained(name, trust_remote_code=True)
     #config.max_seq_len = 8192
     #config.attn_config['attn_impl'] = 'triton'  # change this to use triton-based FlashAttention
-    #config.init_device = 'cuda:0'  # For fast initialization directly on GPU!
+    config.init_device = 'cuda:0'  # For fast initialization directly on GPU!
 
-    load_8bit = False
+    load_8bit = True
     tokenizer = AutoTokenizer.from_pretrained(name)  # , padding_side="left")
     model = transformers.AutoModelForCausalLM.from_pretrained(
         name,
@@ -43,9 +43,9 @@ def main():
         model = torch.compile(model)
 
     print("--PIPELINE INIT--")
-    pipeline = InstructionTextGenerationPipeline(model=model, tokenizer=tokenizer)
+    pipe = InstructionTextGenerationPipeline(model=model, tokenizer=tokenizer)
 
-    llm = HuggingFacePipeline(pipeline = pipeline, model_kwargs = {'temperature':0})
+    llm = HuggingFacePipeline(pipeline = pipe, model_kwargs = {'temperature':0})
 
     pdf_path = sys.argv[1]
     loader = PyPDFLoader(pdf_path)
@@ -67,9 +67,11 @@ def main():
     len(documents)
     """
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=0)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
     texts = text_splitter.split_documents(data)
     print(f'Now you have {len(texts)} documents')
+
+    print(texts)
 
     # Check to see if there is an environment variable with your API keys, if not, use what you put below
     PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', '9fa8ba9d-344d-4466-8e7e-78f825ad7caf')
@@ -86,12 +88,12 @@ def main():
     index_name = "example"  # put in the name of your pinecone index here
     docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name)
 
-    question_macro = "What category does this insurance claim belong to? The options are 'Polizze', 'Sinistri' and 'Area Commerciale'"  
-    category_related_docs = docsearch.similarity_search(question_macro)
+    query = "What category does this insurance claim belong to? The options are 'Polizze', 'Sinistri' and 'Area Commerciale'"  
+    category_related_docs = docsearch.similarity_search(query)
     
-    macrocategory_context = """You are a text classifier of insurance claims.
-    Given the input documents which represent an insurance claim, classify and label
-    the insurance claim with one of these three classes: Polizze, Sinistri and Area Commerciale.
+    context = """You are a text classifier of insurance claims.
+    Given the following extracted parts of a long document and a question, classify and label
+    the document with one of these three classes: Polizze, Sinistri and Area Commerciale.
     Here is a detailed description of the meaning of each class:
     The 'Polizze' class groups all the insurance claims sent by customers to report issues related to the contract established between the customer and the referring insurance company are included.
     This includes any requested insurance type: life insurance, auto insurance, health insurance, and more.
@@ -102,25 +104,28 @@ def main():
 
     macrocategory_prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
-    Context: {macrocategory_context}
+    Context: {context}
 
-    Question: {question_macro}
+    Question: {question}
     Answer in Italian:""" 
-    
-    print(macrocategory_prompt_template)
 
     macrocategory_prompt = PromptTemplate(
         template=macrocategory_prompt_template,
-        input_variables=["macrocategory_context","question_macro"]
+        input_variables=["context","question"]
     )
-    chain = load_qa_chain(llm, prompt=macrocategory_prompt, output_key="macrocategory_result", chain_type="stuff")
+    
+    chain = load_qa_chain(llm=llm, prompt=macrocategory_prompt, output_key="macrocategory_result", chain_type="stuff")
     
     # Run the macrocategory chain to classify the macrocategory
-    macrocategory_result = chain({"input_documents": category_related_docs, "question": question_macro}, return_only_outputs=True)
+    macrocategory_result = chain({"input_documents": category_related_docs, "question": query})
     
     print(f"Predicted macrocategory: {macrocategory_result}")
     
-    branch_context = """
+    ###############################################################################################################
+    
+    query = "What branch does this insurance claim belong to? The options are 'Auto', 'Vita' and 'Altri rami'."
+    
+    context = """
         You are again a text classifier. Given your previous answer containing the class assigned to the insurance claim,
         classify the insurance claim for the Polizze category into three possible branches: 'Auto', 'Vita' and 'Altri rami'.
         'Auto' includes all the insurance claims related to car insurance.
@@ -128,15 +133,6 @@ def main():
         'Altri rami' includes all the insurance claims that do not belong to the 'Auto' or 'Vita' branches, for example
         health insurance, home insurance, theft insurance, fire insurance, technological risks and more.
         """
-    
-    """
-    # Define the second context and query based on the macrocategory result
-    if macrocategory_result == "Polizze":
-        # Sottocategorie....
-    elif macrocategory_result == "Sinistri":
-        # Sottocategorie....
-    elif macrocategory_result == "Area Commerciale":
-    """
 
     question_branch = """What branch does this insurance claim belong to? The options are 'Auto', 'Vita' and 'Altri rami'.
     The 'Altri rami' branch includes all the insurance claims that do not belong to the 'Auto' or 'Vita' branches."""
@@ -146,20 +142,20 @@ def main():
     branch_prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
     Macrocategory: {macrocategory_result}
-    Context: {branch_context}
+    Context: {context}
 
-    Question: {question_branch}
+    Question: {question}
     Answer in Italian:""" 
 
-    second_prompt = PromptTemplate(
+    branch_prompt = PromptTemplate(
         template=branch_prompt_template,
-        input_variables=["branch_context","question","macrocategory_result"]
+        input_variables=["macrocategory_result","context","question"]
     )
 
-    chain_two = load_qa_chain(pipeline=pipeline, prompt=second_prompt, output_key="branch_result")
+    chain_two = load_qa_chain(pipeline=pipeline, prompt=branch_prompt, output_key="branch_result")
 
     # Run the second chain to classify the branch
-    branch_result = chain_two({"input_documents": branch_related_docs, "question": question_branch}, return_only_outputs=True)
+    branch_result = chain_two({"input_documents": branch_related_docs, "question": query}, return_only_outputs=True)
 
     print(f"Branch result: {branch_result}")
     
@@ -169,7 +165,7 @@ def main():
     
     overall_chain = SequentialChain(
         chains=[chain, chain_two],
-        input_variables=["macrocategory_context", "question_macro", "branch_context", "question_branch"],
+        input_variables=["context", "question"],
         # Here we return multiple variables
         output_variables=["macrocategory_result", "branch_result"],
         verbose=True)
