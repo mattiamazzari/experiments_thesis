@@ -143,7 +143,7 @@ def main():
         
     branch_related_docs = docsearch.similarity_search(question_branch)
     
-    second_prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+    branch_prompt_template = """Use the following pieces of context to answer to the provided query. If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
     Macrocategory: {macrocategory_result}
     Context: {branch_context}
@@ -152,7 +152,7 @@ def main():
     Answer in Italian:""" 
 
     second_prompt = PromptTemplate(
-        template=second_prompt_template,
+        template=branch_prompt_template,
         input_variables=["branch_context","question","macrocategory_result"]
     )
 
