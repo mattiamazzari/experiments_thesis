@@ -9,6 +9,7 @@ from langchain.chains import LLMChain
 from langchain import HuggingFacePipeline
 from transformers import AutoTokenizer
 from langchain.chains import SimpleSequentialChain
+from instruct_pipeline import InstructionTextGenerationPipeline
 import transformers
 import torch
 import pinecone
@@ -50,7 +51,7 @@ def main():
         environment=PINECONE_API_ENV  # next to api key in console
     )
 
-    index_name = "langchaintest" # put in the name of your pinecone index here
+    index_name = "example" # put in the name of your pinecone index here
     docsearch = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name)
 
     query = "What category does this insurance claim belong to?"
@@ -58,23 +59,30 @@ def main():
     docs_for_category = docsearch.similarity_search(query)
     docs_for_subcategory = docsearch.similarity_search(query_2)
     
-    model = "meta-llama/Llama-2-7b-chat-hf"
+    name = 'mosaicml/mpt-7b'
 
-    tokenizer = AutoTokenizer.from_pretrained(model)
+    config = transformers.AutoConfig.from_pretrained(name, trust_remote_code=True)
+    #config.max_seq_len = 8192
+    #config.attn_config['attn_impl'] = 'triton'  # change this to use triton-based FlashAttention
+    #config.init_device = 'cuda:0'  # For fast initialization directly on GPU!
 
-    pipeline = transformers.pipeline(
-        "text-generation", #task
-        model=model,
-        tokenizer=tokenizer,
-        torch_dtype=torch.bfloat16,
+    load_8bit = True
+    tokenizer = AutoTokenizer.from_pretrained(name)  # , padding_side="left")
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        name,
+        config=config,
+        torch_dtype=torch.bfloat16,  # Load model weights in bfloat16
         trust_remote_code=True,
+        load_in_8bit=load_8bit,
         device_map="auto",
-        max_length=1000,
-        do_sample=True,
-        top_k=10,
-        num_return_sequences=1,
-        eos_token_id=tokenizer.eos_token_id
     )
+
+    model.eval()
+    if torch.__version__ >= "2":
+        model = torch.compile(model)
+
+    print("--PIPELINE INIT--")
+    pipeline = InstructionTextGenerationPipeline(model=model, tokenizer=tokenizer)
 
     llm = HuggingFacePipeline(pipeline = pipeline, model_kwargs = {'temperature':0})
     
